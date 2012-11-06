@@ -1,0 +1,59 @@
+#/!/bin/bash
+
+sandbox_shell_hypervisor_process() {
+	mount -t tmpfs tmpfs $SANDBOX_ROOT
+	mkdir "$SANDBOX_ROOT/root"
+	sandbox_mounts "$SANDBOX_ROOT/root"
+	cp $1 $SANDBOX_ROOT/.config
+	chmod 0700 $SANDBOX_ROOT/.config
+	exec 3<&0
+	unshare -uinm $0 $1 .child <&3 &
+	SANDBOX_PID=$!
+	sandbox_network "$SANDBOX_ROOT" $SANDBOX_PID
+	trap "kill $SANDBOX_PID" exit TERM
+	wait
+	trap "" exit INT TERM
+	sandbox_cleanup "$SANDBOX_ROOT" $SANDBOX_PID
+	exit $?
+}
+sandbox_shell_child_process() {
+	pivot_root "$SANDBOX_ROOT/root" "$SANDBOX_ROOT/root/$SANDBOX_TMP"
+	umount $SANDBOX_TMP -l
+	cd "/"
+	shift 2
+	run_environment $@
+	exit $?
+}
+
+CONFIG=$1
+if [ -f "$CONFIG" ]; then
+	if [ -f "./$CONFIG" ]; then
+		. ./$CONFIG
+	else
+		. $CONFIG
+	fi
+else
+	echo "Unable to load config"
+	exit 1
+fi
+
+if [ "$2" = ".hypervisor" ]; then
+	sandbox_shell_hypervisor_process $@
+	exit $?
+fi
+if [ "$2" = ".child" ]; then
+	sandbox_shell_child_process $@
+	exit $?
+fi
+
+if [ ! $SANDBOX_ROOT ]; then
+	export SANDBOX_ROOT=`tempfile -p jail`
+	export SANDBOX_TMP="/mnt"
+	rm $SANDBOX_ROOT
+	mkdir $SANDBOX_ROOT
+fi
+
+
+unshare -m $0 $CONFIG .hypervisor $@
+rm $SANDBOX_ROOT -r
+
