@@ -47,7 +47,7 @@ if [ "$2" = ".child" ]; then
 fi
 
 if [ ! $SANDBOX_ROOT ]; then
-	export SANDBOX_ROOT=`tempfile -p jail`
+	export SANDBOX_ROOT=`tempfile -p jail -s $$`
 	export SANDBOX_TMP="/mnt"
 	rm $SANDBOX_ROOT
 	mkdir $SANDBOX_ROOT
